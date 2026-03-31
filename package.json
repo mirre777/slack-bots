@@ -1,0 +1,8 @@
+{
+  "name": "slack-bots",
+  "version": "1.0.0",
+  "description": "Claude-powered Slack bots on Vercel",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0"
+  }
+}
