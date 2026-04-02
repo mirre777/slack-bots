@@ -11,8 +11,9 @@ You have access to these tools:
 - WhatsApp: send messages via Twilio
 - Todoist: view, create, and complete tasks
 - Wise: check balances, recent transactions, and exchange rates
+- Packages: list tracked packages with status and tracking links
 
-Be concise and helpful. Use tools when the user asks about emails, calendar, tasks, finances, or wants to send messages. Respond in Dutch unless the user writes in English.
+Be concise and helpful. Use tools when the user asks about emails, calendar, tasks, finances, packages, or wants to send messages. Respond in Dutch unless the user writes in English.
 Today's date is ${new Date().toISOString().split("T")[0]}.`,
   useTools: true,
 });
