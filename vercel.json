@@ -14,12 +14,8 @@
       "schedule": "0 21 * * *"
     },
     {
-      "path": "/api/scan-emails",
-      "schedule": "0 8,13,18 * * *"
-    },
-    {
       "path": "/api/email-triage",
-      "schedule": "15 8,13,18 * * *"
+      "schedule": "0 8,13,18 * * *"
     }
   ]
 }
