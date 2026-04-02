@@ -8,6 +8,10 @@
     {
       "path": "/api/summary",
       "schedule": "0 21 * * *"
+    },
+    {
+      "path": "/api/scan-emails",
+      "schedule": "0 8,13,18 * * *"
     }
   ]
 }
