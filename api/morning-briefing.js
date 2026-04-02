@@ -101,17 +101,17 @@ Respond ONLY with JSON.`,
 
     // Build triage section
     const sections = [];
-    if (triage.urgent?.length) sections.push(`  🔴 *Urgent* (${triage.urgent.length}): ${triage.urgent.map((e) => e.subject).join(", ")}`);
-    if (triage.action?.length) sections.push(`  🟡 *Actie* (${triage.action.length}): ${triage.action.map((e) => e.subject).join(", ")}`);
-    if (triage.later?.length) sections.push(`  🔵 *Later* (${triage.later.length}): ${triage.later.map((e) => e.subject).join(", ")}`);
-    if (triage.spam?.length) sections.push(`  ⚪ *Spam* (${triage.spam.length}) — gearchiveerd`);
+    if (triage.urgent?.length) sections.push(`  *Urgent* (${triage.urgent.length}): ${triage.urgent.map((e) => e.subject).join(", ")}`);
+    if (triage.action?.length) sections.push(`  *Actie* (${triage.action.length}): ${triage.action.map((e) => e.subject).join(", ")}`);
+    if (triage.later?.length) sections.push(`  *Later* (${triage.later.length}): ${triage.later.map((e) => e.subject).join(", ")}`);
+    if (triage.spam?.length) sections.push(`  *Spam* (${triage.spam.length}) — gearchiveerd`);
 
     triageSection = sections.join("\n");
 
     const acts = [];
-    if (starred) acts.push(`⭐ ${starred} gestarred`);
-    if (archived) acts.push(`🗑️ ${archived} gearchiveerd`);
-    if (created.length) acts.push(`✅ ${created.length} taken → Todoist`);
+    if (starred) acts.push(`${starred} gestarred`);
+    if (archived) acts.push(`${archived} gearchiveerd`);
+    if (created.length) acts.push(`${created.length} taken → Todoist`);
     if (acts.length) triageActions = `\n  _${acts.join(" · ")}_`;
   }
 
@@ -138,13 +138,17 @@ ${transactions}
 
 Structure it EXACTLY as:
 1. Goedemorgen + weather (1 line, include temp)
-2. 📅 *Agenda vandaag* — events with times
-3. 📅 *Komende 3 dagen* — events per day (skip today)
-4. ✅ *Taken* — list tasks, highlight overdue
-5. 💰 *Financiën* — Wise balances (personal + business) + notable recent transactions
-6. 💡 *Heads up* — conflicts, tight schedules, low balances, things to watch
+2. :calendar: *Agenda vandaag* — events with times
+3. :calendar: *Komende 3 dagen* — events per day (skip today)
+4. :white_check_mark: *Taken* — list tasks, highlight overdue
+5. :moneybag: *Financiën* — Wise balances (personal + business) + notable recent transactions
+6. :bulb: *Heads up* — conflicts, tight schedules, low balances, things to watch
 
-Keep it scannable. Bold headers, bullets, emoji. Be concise. Skip sections if no data.`;
+IMPORTANT formatting rules:
+- Use ONE emoji only in section headings (as shown above). Use Slack emoji codes like :calendar: :moneybag: :bulb:
+- Do NOT use any emoji in the body text under each heading. No icons, no emoji, just plain text with bold and bullets.
+- Use --- between sections as dividers.
+- Keep it scannable with bold and bullets. Be concise. Skip sections if no data.`;
 
   const briefing = await askClaude(
     "You are a personal assistant creating a comprehensive morning briefing. Be concise, actionable, respond in Dutch.",
@@ -154,13 +158,13 @@ Keep it scannable. Bold headers, bullets, emoji. Be concise. Skip sections if no
 
   // Combine briefing + email triage (triage is structured data, not AI-generated)
   const emailBlock = emails.length
-    ? `\n\n📬 *Email Triage* — ${emails.length} emails verwerkt${triageActions}\n${triageSection}`
+    ? `\n\n:mailbox_with_mail: *Email Triage* — ${emails.length} emails verwerkt${triageActions}\n${triageSection}`
     : "";
 
   await postMessage(
     process.env.BOT1_TOKEN,
     process.env.SLACK_CHANNEL_ID,
-    `☀️ *Ochtend Briefing — ${today}*\n\n${briefing}${emailBlock}`
+    `:sunny: *Ochtend Briefing — ${today}*\n\n${briefing}${emailBlock}`
   );
 
   return res.status(200).json({ status: "ok" });

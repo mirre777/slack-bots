@@ -97,33 +97,33 @@ Respond ONLY with the JSON object, no other text.`;
   const sections = [];
 
   if (triage.urgent?.length) {
-    sections.push(`🔴 *URGENT* (${triage.urgent.length}) ⭐ gestarred\n${formatCategory(triage.urgent)}`);
+    sections.push(`*Urgent* (${triage.urgent.length}) — gestarred\n${formatCategory(triage.urgent)}`);
   }
   if (triage.action?.length) {
-    sections.push(`🟡 *ACTIE NODIG* (${triage.action.length})\n${formatCategory(triage.action)}`);
+    sections.push(`*Actie nodig* (${triage.action.length})\n${formatCategory(triage.action)}`);
   }
   if (triage.later?.length) {
-    sections.push(`🔵 *LATER LEZEN* (${triage.later.length})\n${formatCategory(triage.later)}`);
+    sections.push(`*Later lezen* (${triage.later.length})\n${formatCategory(triage.later)}`);
   }
   if (triage.spam?.length) {
-    sections.push(`⚪ *SPAM/SKIP* (${triage.spam.length}) 🗑️ gearchiveerd\n${formatCategory(triage.spam)}`);
+    sections.push(`*Spam/skip* (${triage.spam.length}) — gearchiveerd\n${formatCategory(triage.spam)}`);
   }
 
   const total = (triage.urgent?.length || 0) + (triage.action?.length || 0) +
     (triage.later?.length || 0) + (triage.spam?.length || 0);
 
   const actions = [];
-  if (starred) actions.push(`⭐ ${starred} gestarred`);
-  if (archived) actions.push(`🗑️ ${archived} gearchiveerd`);
-  if (created.length) actions.push(`✅ ${created.length} taken → Todoist`);
+  if (starred) actions.push(`${starred} gestarred`);
+  if (archived) actions.push(`${archived} gearchiveerd`);
+  if (created.length) actions.push(`${created.length} taken → Todoist`);
   const actionLine = actions.length ? `\n_${actions.join(" · ")}_` : "";
 
   let taskSection = "";
   if (created.length) {
-    taskSection = `\n\n✅ *Taken aangemaakt in Todoist:*\n${created.map((t) => `• ${t}`).join("\n")}`;
+    taskSection = `\n\n*Taken aangemaakt in Todoist:*\n${created.map((t) => `• ${t}`).join("\n")}`;
   }
 
-  const message = `📬 *Email Triage* — ${total} emails verwerkt${actionLine}\n\n${sections.join("\n\n")}${taskSection}`;
+  const message = `:mailbox_with_mail: *Email Triage* — ${total} emails verwerkt${actionLine}\n\n${sections.join("\n\n")}${taskSection}`;
 
   await postMessage(process.env.BOT1_TOKEN, process.env.SLACK_CHANNEL_ID, message);
 
