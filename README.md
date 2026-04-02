@@ -37,6 +37,11 @@ Slack ←→ Vercel Serverless Functions ←→ Claude API (tool_use)
 
 ## Scheduled Jobs
 
+### Morning Briefing
+- **Endpoint:** `/api/morning-briefing`
+- **Schedule:** Every day at 07:30 CET (05:30 UTC)
+- **Flow:** Fetches calendar, Todoist tasks, unread emails, and weather (Doesburg) → Claude generates Dutch briefing → posts to Slack
+
 ### Daily Summary
 - **Endpoint:** `/api/summary`
 - **Schedule:** Every day at 21:00 UTC (cron)
@@ -60,6 +65,8 @@ Slack ←→ Vercel Serverless Functions ←→ Claude API (tool_use)
 | `TWILIO_WHATSAPP_FROM` | Twilio WhatsApp sandbox number |
 | `KV_REDIS_URL` | Upstash Redis URL (via Vercel KV) |
 | `SLACK_CHANNEL_ID` | Slack channel for summaries |
+| `OPENWEATHER_API_KEY` | OpenWeatherMap API key (free tier) |
+| `WEATHER_CITY` | City for weather data (default: Doesburg) |
 | `CRON_SECRET` | Secret for cron job auth |
 
 ## Project Structure
@@ -69,6 +76,8 @@ api/
   bot1.js          — Bot 1 handler (personal assistant with tools)
   bot2.js          — Bot 2 handler (general assistant)
   whatsapp.js      — Twilio WhatsApp incoming webhook
+  morning-briefing.js — Morning briefing cron (calendar, tasks, emails, weather)
+  scan-emails.js   — Email scanner cron (extracts tasks to Todoist)
   summary.js       — Daily summary cron endpoint
 lib/
   claude.js        — Claude API client with tool_use support
