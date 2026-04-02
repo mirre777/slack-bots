@@ -11,9 +11,14 @@ module.exports = async function handler(req, res) {
 
   const today = new Date().toISOString().split("T")[0];
 
+  // Next 3 days end date
+  const threeDaysLater = new Date();
+  threeDaysLater.setDate(threeDaysLater.getDate() + 3);
+
   // Gather all data in parallel
-  const [calendar, tasks, emails, weather] = await Promise.all([
+  const [calendarToday, calendarNext3, tasks, emails, weather] = await Promise.all([
     listEvents({ maxResults: 10 }).catch(() => "Could not fetch calendar."),
+    listEvents({ maxResults: 20, timeMin: new Date().toISOString() }).catch(() => "Could not fetch upcoming events."),
     listTasks({ filter: "today | overdue" }).catch(() => "Could not fetch tasks."),
     listEmails({ maxResults: 10, query: "is:unread newer_than:1d" }).catch(() => "Could not fetch emails."),
     fetchWeather().catch(() => "Could not fetch weather."),
@@ -21,8 +26,11 @@ module.exports = async function handler(req, res) {
 
   const prompt = `Here is my morning data for ${today}:
 
-📅 CALENDAR (today's events):
-${calendar}
+📅 CALENDAR TODAY:
+${calendarToday}
+
+📅 NEXT 3 DAYS:
+${calendarNext3}
 
 ✅ TASKS (today + overdue):
 ${tasks}
@@ -36,9 +44,10 @@ ${weather}
 Create a concise morning briefing in Dutch. Structure it as:
 1. Goedemorgen + weather summary (1 line)
 2. 📅 Agenda vandaag — list events with times
-3. ✅ Taken — list tasks, highlight overdue ones
-4. 📧 Inbox — summarize important unread emails, skip newsletters/spam
-5. 💡 Heads up — any conflicts, tight schedules, or things to watch out for
+3. 📅 Komende 3 dagen — upcoming events per day (skip today, already listed above)
+4. ✅ Taken — list tasks, highlight overdue ones
+5. 📧 Inbox — summarize important unread emails, skip newsletters/spam
+6. 💡 Heads up — any conflicts, tight schedules, or things to watch out for
 
 Keep it scannable for Slack. Use bold, bullets, and emoji. Be concise.`;
 
