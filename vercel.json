@@ -10,16 +10,12 @@
       "schedule": "30 5 * * *"
     },
     {
-      "path": "/api/finance-summary",
-      "schedule": "35 5 * * *"
+      "path": "/api/email-triage",
+      "schedule": "0 13,18 * * *"
     },
     {
       "path": "/api/summary",
       "schedule": "0 21 * * *"
-    },
-    {
-      "path": "/api/email-triage",
-      "schedule": "0 8,13,18 * * *"
     }
   ]
 }

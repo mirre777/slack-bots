@@ -1,6 +1,7 @@
 const { listEvents } = require("../lib/tools/calendar");
-const { listEmails } = require("../lib/tools/gmail");
-const { listTasks } = require("../lib/tools/todoist");
+const { listEmailsRaw, starMessage, archiveMessage } = require("../lib/tools/gmail");
+const { listTasks, createTask } = require("../lib/tools/todoist");
+const { getBalances, getTransactions } = require("../lib/tools/wise");
 const { askClaude } = require("../lib/claude");
 const { postMessage } = require("../lib/slack");
 
@@ -11,20 +12,114 @@ module.exports = async function handler(req, res) {
 
   const today = new Date().toISOString().split("T")[0];
 
-  // Next 3 days end date
-  const threeDaysLater = new Date();
-  threeDaysLater.setDate(threeDaysLater.getDate() + 3);
-
-  // Gather all data in parallel
-  const [calendarToday, calendarNext3, tasks, emails, weather] = await Promise.all([
+  // Gather ALL data in parallel
+  const [calendarToday, calendarNext3, tasks, emails, weather, balances, transactions] = await Promise.all([
     listEvents({ maxResults: 10 }).catch(() => "Could not fetch calendar."),
     listEvents({ maxResults: 20, timeMin: new Date().toISOString() }).catch(() => "Could not fetch upcoming events."),
     listTasks({ filter: "today | overdue" }).catch(() => "Could not fetch tasks."),
-    listEmails({ maxResults: 10, query: "is:unread newer_than:1d" }).catch(() => "Could not fetch emails."),
+    listEmailsRaw({ maxResults: 20, query: "is:unread newer_than:1d" }).catch(() => []),
     fetchWeather().catch(() => "Could not fetch weather."),
+    getBalances().catch(() => "Could not fetch balances."),
+    getTransactions({ limit: 10 }).catch(() => "Could not fetch transactions."),
   ]);
 
-  const prompt = `Here is my morning data for ${today}:
+  // --- EMAIL TRIAGE ---
+  let triageSection = "Geen ongelezen emails.";
+  let triageActions = "";
+
+  if (emails.length) {
+    const emailList = emails
+      .map((e, i) => `[${i}] Subject: ${e.subject}\nFrom: ${e.from}\nDate: ${e.date}\n${e.snippet}`)
+      .join("\n\n---\n\n");
+
+    const triageResult = await askClaude(
+      "You triage emails and extract tasks precisely. Only return valid JSON.",
+      `Analyze these unread emails. Return a JSON object with TWO keys: "triage" and "tasks".
+
+Emails:
+${emailList}
+
+**triage**: categorize every email into 4 categories:
+- "urgent": needs immediate attention
+- "action": needs response but not urgent
+- "later": informational, newsletters
+- "spam": marketing, promotions, irrelevant
+
+Each item: { "index": N, "subject": "...", "from": "...", "reason": "..." (Dutch) }
+
+**tasks**: actionable to-dos from urgent+action emails only.
+Each: { "content": "task title", "due_string": "deadline or null", "priority": 1-4 (4=urgent), "source": "sender" }
+
+Respond ONLY with JSON.`,
+      false
+    );
+
+    let parsed;
+    try {
+      parsed = JSON.parse(triageResult);
+    } catch {
+      parsed = { triage: {}, tasks: [] };
+    }
+
+    const triage = parsed.triage || {};
+    const newTasks = parsed.tasks || [];
+
+    // Star urgent, archive spam
+    let starred = 0;
+    for (const item of triage.urgent || []) {
+      const email = emails[item.index];
+      if (email) {
+        try { await starMessage(email.id); starred++; }
+        catch (err) { console.error("Star failed:", err.message); }
+      }
+    }
+
+    let archived = 0;
+    for (const item of triage.spam || []) {
+      const email = emails[item.index];
+      if (email) {
+        try { await archiveMessage(email.id); archived++; }
+        catch (err) { console.error("Archive failed:", err.message); }
+      }
+    }
+
+    // Create Todoist tasks
+    const created = [];
+    for (const task of newTasks) {
+      try {
+        await createTask({
+          content: task.content,
+          description: `Source: ${task.source || "email"}`,
+          due_string: task.due_string || undefined,
+          priority: task.priority || 1,
+        });
+        created.push(task.content);
+      } catch (err) {
+        console.error("Task failed:", err.message);
+      }
+    }
+
+    // Build triage section
+    const sections = [];
+    if (triage.urgent?.length) sections.push(`  🔴 *Urgent* (${triage.urgent.length}): ${triage.urgent.map((e) => e.subject).join(", ")}`);
+    if (triage.action?.length) sections.push(`  🟡 *Actie* (${triage.action.length}): ${triage.action.map((e) => e.subject).join(", ")}`);
+    if (triage.later?.length) sections.push(`  🔵 *Later* (${triage.later.length}): ${triage.later.map((e) => e.subject).join(", ")}`);
+    if (triage.spam?.length) sections.push(`  ⚪ *Spam* (${triage.spam.length}) — gearchiveerd`);
+
+    triageSection = sections.join("\n");
+
+    const acts = [];
+    if (starred) acts.push(`⭐ ${starred} gestarred`);
+    if (archived) acts.push(`🗑️ ${archived} gearchiveerd`);
+    if (created.length) acts.push(`✅ ${created.length} taken → Todoist`);
+    if (acts.length) triageActions = `\n  _${acts.join(" · ")}_`;
+  }
+
+  // --- BUILD ONE BIG BRIEFING ---
+  const prompt = `Create ONE concise morning briefing in Dutch from this data. Date: ${today}.
+
+🌤️ WEATHER:
+${weather}
 
 📅 CALENDAR TODAY:
 ${calendarToday}
@@ -35,32 +130,37 @@ ${calendarNext3}
 ✅ TASKS (today + overdue):
 ${tasks}
 
-📧 UNREAD EMAILS:
-${emails}
+💰 WISE BALANCES:
+${balances}
 
-🌤️ WEATHER:
-${weather}
+📊 WISE TRANSACTIONS (last 30 days):
+${transactions}
 
-Create a concise morning briefing in Dutch. Structure it as:
-1. Goedemorgen + weather summary (1 line)
-2. 📅 Agenda vandaag — list events with times
-3. 📅 Komende 3 dagen — upcoming events per day (skip today, already listed above)
-4. ✅ Taken — list tasks, highlight overdue ones
-5. 📧 Inbox — summarize important unread emails, skip newsletters/spam
-6. 💡 Heads up — any conflicts, tight schedules, or things to watch out for
+Structure it EXACTLY as:
+1. Goedemorgen + weather (1 line, include temp)
+2. 📅 *Agenda vandaag* — events with times
+3. 📅 *Komende 3 dagen* — events per day (skip today)
+4. ✅ *Taken* — list tasks, highlight overdue
+5. 💰 *Financiën* — Wise balances (personal + business) + notable recent transactions
+6. 💡 *Heads up* — conflicts, tight schedules, low balances, things to watch
 
-Keep it scannable for Slack. Use bold, bullets, and emoji. Be concise.`;
+Keep it scannable. Bold headers, bullets, emoji. Be concise. Skip sections if no data.`;
 
   const briefing = await askClaude(
-    "You are a personal assistant creating a morning briefing. Be concise, actionable, and respond in Dutch.",
+    "You are a personal assistant creating a comprehensive morning briefing. Be concise, actionable, respond in Dutch.",
     prompt,
     false
   );
 
+  // Combine briefing + email triage (triage is structured data, not AI-generated)
+  const emailBlock = emails.length
+    ? `\n\n📬 *Email Triage* — ${emails.length} emails verwerkt${triageActions}\n${triageSection}`
+    : "";
+
   await postMessage(
     process.env.BOT1_TOKEN,
     process.env.SLACK_CHANNEL_ID,
-    `☀️ *Ochtend Briefing — ${today}*\n\n${briefing}`
+    `☀️ *Ochtend Briefing — ${today}*\n\n${briefing}${emailBlock}`
   );
 
   return res.status(200).json({ status: "ok" });
