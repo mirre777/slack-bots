@@ -16,6 +16,10 @@
     {
       "path": "/api/summary",
       "schedule": "0 21 * * *"
+    },
+    {
+      "path": "/api/clear-channel",
+      "schedule": "0 23 * * *"
     }
   ]
 }
