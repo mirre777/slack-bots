@@ -42,6 +42,11 @@ Slack ←→ Vercel Serverless Functions ←→ Claude API (tool_use)
 - **Schedule:** Every day at 07:30 CET (05:30 UTC)
 - **Flow:** Fetches calendar, Todoist tasks, unread emails, and weather (Doesburg) → Claude generates Dutch briefing → posts to Slack
 
+### Email Triage
+- **Endpoint:** `/api/email-triage`
+- **Schedule:** 3x per day at 08:15, 13:15, 18:15 UTC (15 min after email scan)
+- **Flow:** Fetches unread emails → Claude categorizes (urgent/actie/later/spam) → posts sorted overview to Slack
+
 ### Daily Summary
 - **Endpoint:** `/api/summary`
 - **Schedule:** Every day at 21:00 UTC (cron)
@@ -77,6 +82,7 @@ api/
   bot2.js          — Bot 2 handler (general assistant)
   whatsapp.js      — Twilio WhatsApp incoming webhook
   morning-briefing.js — Morning briefing cron (calendar, tasks, emails, weather)
+  email-triage.js  — Email triage cron (categorizes emails)
   scan-emails.js   — Email scanner cron (extracts tasks to Todoist)
   summary.js       — Daily summary cron endpoint
 lib/
