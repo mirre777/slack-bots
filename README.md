@@ -34,6 +34,41 @@ Slack ←→ Vercel Serverless Functions ←→ Claude API (tool_use)
   - General Q&A powered by Claude
   - No tool integrations (yet)
 
+### Ops Bot — Production Error Summaries
+Ops tooling for the OneThing production app. Two pieces: a passive log sink (Vercel -> Redis) and an on-demand slash command (`/ops`) that summarizes recent errors via Claude.
+
+- **Slash command:** `/ops` in Slack (registered on Bot 1's Slack app)
+- **Endpoint:** `/api/ops`
+- **Usage:**
+  - `/ops` — last 1h of errors (default)
+  - `/ops last 24h` — last 24h
+  - `/ops last 30m` — last 30 minutes
+  - `/ops deployment dpl_abc` — filter by deployment ID substring
+- **Flow:**
+  1. Slack POSTs signed request -> signature verified with `BOT1_SIGNING_SECRET`
+  2. Immediate 200 ack within Slack's 3-second window (`Checking...`)
+  3. Async: reads last 500 entries from Redis `ops:errors`, filters by range
+  4. Claude Haiku 4.5 summarizes (groups by deployment ID + root cause, flags patterns)
+  5. POSTs result back to Slack `response_url`
+- **Gating:** none (in-channel; anyone in the channel can run it)
+
+### Log Sink — Vercel -> Redis
+Receives production errors from a Vercel Log Drain. Not a Slack bot, no user interaction.
+
+- **Endpoint:** `/api/log-sink` (POST from Vercel; GET/HEAD returns 200 + `x-vercel-verify` for drain validation)
+- **HMAC:** `x-vercel-signature` verified with `LOG_SINK_SECRET`
+- **Storage:** pushes compact records to Redis list `ops:errors`, capped at 500 via `LTRIM`
+- **Filter:** only stores entries with `level=error|fatal` or HTTP status >= 500
+- **Record shape:**
+  ```json
+  { "ts": 1776724500000, "level": "error", "msg": "...",
+    "deploymentId": "dpl_abc", "environment": "production",
+    "requestId": "iad1::...", "path": "/api/decide",
+    "region": "iad1", "statusCode": 500, "source": "lambda" }
+  ```
+- **Source drain:** configured on the OneThing Vercel project, pointed at this endpoint, production + preview environments
+- **Verification token:** `VERCEL_VERIFY_TOKEN` env var, served on every response as `x-vercel-verify` header
+
 ## Webhooks
 
 ### WhatsApp Incoming
@@ -86,6 +121,9 @@ Slack ←→ Vercel Serverless Functions ←→ Claude API (tool_use)
 | `OPENWEATHER_API_KEY` | OpenWeatherMap API key (free tier) |
 | `WEATHER_CITY` | City for weather data (default: Doesburg) |
 | `CRON_SECRET` | Secret for cron job auth |
+| `LOG_SINK_SECRET` | HMAC secret shared with the Vercel Log Drain |
+| `VERCEL_VERIFY_TOKEN` | Team-scoped token echoed back on `x-vercel-verify` for drain validation |
+| `OPS_SLACK_CHANNEL_ID` | Slack channel used for Sentry alerts (reserved for upcoming `sentry-alert.js`) |
 
 ## Project Structure
 
@@ -93,6 +131,8 @@ Slack ←→ Vercel Serverless Functions ←→ Claude API (tool_use)
 api/
   bot1.js              — Bot 1 handler (personal assistant with tools)
   bot2.js              — Bot 2 handler (general assistant)
+  log-sink.js          — Vercel Log Drain receiver, writes errors to Redis ring buffer
+  ops.js               — /ops slash command, summarizes recent errors via Claude Haiku
   whatsapp.js          — Twilio WhatsApp incoming webhook
   morning-briefing.js  — Morning briefing cron (calendar, tasks, emails, weather)
   finance-summary.js   — Daily finance summary cron (Wise)
