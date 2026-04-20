@@ -48,6 +48,14 @@ function compactEntry(entry) {
 }
 
 module.exports = async function handler(req, res) {
+  if (process.env.VERCEL_VERIFY_TOKEN) {
+    res.setHeader("x-vercel-verify", process.env.VERCEL_VERIFY_TOKEN);
+  }
+
+  if (req.method === "GET" || req.method === "HEAD") {
+    return res.status(200).end();
+  }
+
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
