@@ -65,12 +65,15 @@ Triggers a Vercel preview deployment for any non-production branch directly from
 
 - **Slash command:** `/preview <branch>` in Slack (registered on Bot 1's Slack app)
 - **Endpoint:** `/api/preview`
+- **Invocation:** runs from any channel or DM in the workspace. Invocation channel is irrelevant.
 - **Gating:** user's Slack `user_id` must be in `ALLOWED_SLACK_USER_IDS` (CSV). On first run, the handler replies with your user_id so you can add it.
 - **Refuses:** the `main` branch (production safety). All other branches are fair game.
+- **Broadcast channel:** `PREVIEW_SLACK_CHANNEL_ID` (currently `#deployments`). Bot 1 must be a member of the channel.
 - **Flow:**
   1. Verify Slack signature with `BOT1_SIGNING_SECRET`, check allowlist
-  2. POST to Vercel `/v13/deployments` with `gitSource = { type: "github", repoId, ref }` and `target: "preview"`
-  3. Slack gets an immediate ack; when the API call returns, the handler POSTs the deployment URL + inspector link via `response_url`
+  2. Send an **ephemeral ack** to the invoking user in the channel where they typed the command
+  3. POST to Vercel `/v13/deployments` with `gitSource = { type: "github", repoId, ref }`. Do **not** set `target` — Vercel rejects `target: "preview"`; preview is inferred from the branch.
+  4. When the API call returns, `chat.postMessage` the deploy URL + inspector link + `<@invoker>` attribution to `PREVIEW_SLACK_CHANNEL_ID`
 
 ### Log Sink — Vercel -> Redis
 Receives production errors from a Vercel Log Drain. Not a Slack bot, no user interaction.
@@ -150,6 +153,7 @@ Receives production errors from a Vercel Log Drain. Not a Slack bot, no user int
 | `ONETHING_PROJECT_ID` | `prj_…` of the OneThing project |
 | `ONETHING_GITHUB_REPO_ID` | GitHub numeric repo ID for OneThing (required by Vercel deploy API) |
 | `ALLOWED_SLACK_USER_IDS` | CSV of Slack user IDs allowed to trigger `/preview` |
+| `PREVIEW_SLACK_CHANNEL_ID` | Channel where `/preview` broadcasts deploy results (Bot 1 must be a member) |
 
 ## Project Structure
 
