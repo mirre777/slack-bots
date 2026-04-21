@@ -34,22 +34,49 @@ async function createPreviewDeployment(branch) {
   return data;
 }
 
-async function processAsync(responseUrl, branch) {
+async function postToChannel(channel, text) {
+  const res = await fetch("https://slack.com/api/chat.postMessage", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${process.env.BOT1_TOKEN}`,
+    },
+    body: JSON.stringify({ channel, text }),
+  });
+  const data = await res.json();
+  if (!data.ok) console.error("chat.postMessage failed:", data);
+  return data;
+}
+
+async function processAsync(responseUrl, branch, invokingUserId) {
   try {
     const dep = await createPreviewDeployment(branch);
     const url = dep.url ? `https://${dep.url}` : "(no url)";
     const inspectUrl = dep.inspectorUrl || `https://vercel.com/mirre777s-projects/onething/${dep.id}`;
     const text = [
-      `:rocket: Preview deploy queued for \`${branch}\``,
+      `:rocket: Preview deploy queued for \`${branch}\` (by <@${invokingUserId}>)`,
       `URL: ${url}`,
       `Inspect: ${inspectUrl}`,
       `State: \`${dep.readyState || dep.status || "QUEUED"}\` (auto-updates on Vercel)`,
     ].join("\n");
-    await fetch(responseUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ response_type: "in_channel", text }),
-    });
+    const channel = process.env.PREVIEW_SLACK_CHANNEL_ID;
+    if (channel) {
+      await postToChannel(channel, text);
+      await fetch(responseUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          response_type: "ephemeral",
+          text: `:white_check_mark: Preview queued — posted to <#${channel}>`,
+        }),
+      });
+    } else {
+      await fetch(responseUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ response_type: "in_channel", text }),
+      });
+    }
   } catch (err) {
     console.error("preview async failed:", err);
     await fetch(responseUrl, {
@@ -107,11 +134,11 @@ module.exports = async function handler(req, res) {
   }
 
   const branch = text.split(/\s+/)[0];
-  waitUntil(processAsync(responseUrl, branch));
+  waitUntil(processAsync(responseUrl, branch, userId));
 
   return res.status(200).json({
-    response_type: "in_channel",
-    text: `:hourglass_flowing_sand: Creating preview deployment for \`${branch}\`…`,
+    response_type: "ephemeral",
+    text: `:hourglass_flowing_sand: Creating preview deployment for \`${branch}\`… result will post to <#${process.env.PREVIEW_SLACK_CHANNEL_ID || "channel"}>.`,
   });
 };
 
