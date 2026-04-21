@@ -188,3 +188,73 @@ lib/
 Deployed on Vercel. Push to `master` to deploy automatically.
 
 Production URL: `https://slack-bots-self.vercel.app`
+
+---
+
+## Future bots (proposed, not yet built)
+
+Rough plans. Revisit before building to pick an option per bot.
+
+### Support bot
+
+Inbound customer email -> Slack `#support` thread -> Claude drafts a reply grounded in context -> human approves/edits -> bot sends via Gmail. All PII redacted before anything reaches Claude or gets logged.
+
+**Flow sketch:**
+```
+support@rokxgroup.com
+  -> Gmail filter labels "support"
+  -> cron polls labeled unread every ~3 min (or Gmail push via Pub/Sub for real-time)
+  -> /api/support-intake: redacts PII (emails, phones, IDs, names), posts thread to #support
+  -> Claude drafts reply in-thread, grounded in context source
+  -> human /approve or edits -> /api/support-reply sends from real address via Gmail
+```
+
+**Open decisions:**
+- **Auto-send on approval, or always human-typed reply + bot just appends signature?** Autonomous is faster; human-typed is safer. Default to human-typed until we trust drafts.
+- **Inbox:** reuse existing Gmail or create dedicated `support@` alias? Reuse is simpler; dedicated alias keeps triage cleaner.
+- **Context source for drafts:**
+  - (a) Product FAQ / docs in Redis or a file in the repo
+  - (b) Last N resolved support threads as shots
+  - (c) Zero context, Claude only fixes tone/grammar of a human-drafted reply
+- **Sanitization boundary:** strip PII *before* building the Claude prompt, not after. Keep the real address in Redis keyed by Slack `thread_ts`, so `/approve` can look it up when sending.
+
+**Env vars this would add:**
+- `SUPPORT_SLACK_CHANNEL_ID`
+- `SUPPORT_GMAIL_LABEL` (label name to filter on)
+- `SUPPORT_FROM_ADDRESS` (reply-from alias)
+
+### Coding bots (@coder + @planner)
+
+Two Slack bots that run Claude Code autonomously against a repo and open a pull request. Same infra, different postures.
+
+| Bot | Posture | Flow |
+|-----|---------|------|
+| `@coder` | Autonomous | Prompt in Slack -> spins up Claude Code -> branches, writes, tests -> `gh pr create` -> Slack ping with PR URL |
+| `@planner` | Conservative | Prompt in Slack -> Claude Code writes a plan + proposed diff -> Slack draft -> human "go" -> coder flow above |
+
+**Execution environment — pick one:**
+
+| Option | Cold start | Tradeoffs |
+|--------|-----------|-----------|
+| **Vercel Sandbox** (Firecracker microVM, ephemeral) | 5-15s | Spun per task, dies after. Vercel-native. **Lean.** |
+| **GitHub Actions** | 30-60s | Full CI logs, same runner as regular builds. No sandbox mgmt. Slower cold start. |
+| **Fluid Compute** (long-lived Vercel Function) | Sub-second | 5-min max duration, no persistent fs -- **not suitable** for multi-step coding. |
+
+**Guardrails (non-negotiable):**
+- Write access scoped to feature branches only. Never push to `main` from a bot.
+- Initial scope: read-only until `@planner` approves via Slack.
+- Allowlist of repos the bot can touch (e.g. `mirre777/onething`, `mirre777/slack-bots`).
+- PRs opened with `[bot]` prefix + Slack invoker's handle in description.
+- Hard cap on tool-use iterations per invocation (e.g. 30) to prevent runaway.
+
+**Open decisions:**
+- Vercel Sandbox vs GH Actions (see table above)
+- Autonomous-to-PR end-to-end, or plan-first handoff?
+- Which repos in the allowlist at launch?
+- How does the coder bot communicate progress back during long runs? Options: streams partial updates as edits to the initial Slack message; posts a thread with per-step updates; silent until PR opens.
+
+**Env vars this would add:**
+- `CODING_BOT_REPO_ALLOWLIST` (CSV of `owner/repo`)
+- `CODING_BOT_MAX_ITERATIONS`
+- `GITHUB_APP_ID` + `GITHUB_APP_PRIVATE_KEY` (use a GitHub App, not a PAT, for scoped branch-only write)
+- `VERCEL_SANDBOX_TOKEN` (if we go that route) or nothing (if GH Actions, via `gh` CLI auth in the Action)
