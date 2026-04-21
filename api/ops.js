@@ -1,5 +1,6 @@
 const querystring = require("querystring");
 const Anthropic = require("@anthropic-ai/sdk");
+const { waitUntil } = require("@vercel/functions");
 const { verifySlackSignature } = require("../lib/slack");
 const { getClient } = require("../lib/redis");
 
@@ -121,9 +122,9 @@ module.exports = async function handler(req, res) {
     ? `:hourglass_flowing_sand: Checking ops (\`${text}\`)…`
     : `:hourglass_flowing_sand: Checking ops (last 1h)…`;
 
-  res.status(200).json({ response_type: "in_channel", text: ackText });
+  waitUntil(processAsync(responseUrl, text));
 
-  await processAsync(responseUrl, text);
+  return res.status(200).json({ response_type: "in_channel", text: ackText });
 };
 
 module.exports.config = { api: { bodyParser: false } };

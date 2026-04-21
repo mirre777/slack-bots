@@ -4,6 +4,7 @@
   "description": "Claude-powered Slack bots on Vercel",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
+    "@vercel/functions": "^3.4.3",
     "googleapis": "^144.0.0",
     "ioredis": "^5.10.1"
   }
