@@ -52,6 +52,26 @@ Ops tooling for the OneThing production app. Two pieces: a passive log sink (Ver
   5. POSTs result back to Slack `response_url`
 - **Gating:** none (in-channel; anyone in the channel can run it)
 
+### Sentry Bridge — New issue pings
+Posts Sentry issue alerts into the ops Slack channel in real time.
+
+- **Endpoint:** `/api/sentry-alert` (POST from Sentry; accepts Internal Integration webhooks)
+- **Verification:** HMAC-SHA256 of raw body against `sentry-hook-signature` header, using `SENTRY_CLIENT_SECRET`. If the secret is not set, unsigned requests are accepted and a warning is logged (test-mode only).
+- **Posts to:** `OPS_SLACK_CHANNEL_ID` via Bot 1's token.
+- **Setup on Sentry side:** Sentry project -> Settings -> Developer Settings -> New Internal Integration -> webhook URL = this endpoint, events = `issue`, copy the Client Secret into Vercel env `SENTRY_CLIENT_SECRET`. Pair with alert rules "New issue" and "Seen more than N times in Y min".
+
+### Preview Deploy — `/preview <branch>`
+Triggers a Vercel preview deployment for any non-production branch directly from Slack.
+
+- **Slash command:** `/preview <branch>` in Slack (registered on Bot 1's Slack app)
+- **Endpoint:** `/api/preview`
+- **Gating:** user's Slack `user_id` must be in `ALLOWED_SLACK_USER_IDS` (CSV). On first run, the handler replies with your user_id so you can add it.
+- **Refuses:** the `main` branch (production safety). All other branches are fair game.
+- **Flow:**
+  1. Verify Slack signature with `BOT1_SIGNING_SECRET`, check allowlist
+  2. POST to Vercel `/v13/deployments` with `gitSource = { type: "github", repoId, ref }` and `target: "preview"`
+  3. Slack gets an immediate ack; when the API call returns, the handler POSTs the deployment URL + inspector link via `response_url`
+
 ### Log Sink — Vercel -> Redis
 Receives production errors from a Vercel Log Drain. Not a Slack bot, no user interaction.
 
@@ -123,7 +143,13 @@ Receives production errors from a Vercel Log Drain. Not a Slack bot, no user int
 | `CRON_SECRET` | Secret for cron job auth |
 | `LOG_SINK_SECRET` | HMAC secret shared with the Vercel Log Drain |
 | `VERCEL_VERIFY_TOKEN` | Team-scoped token echoed back on `x-vercel-verify` for drain validation |
-| `OPS_SLACK_CHANNEL_ID` | Slack channel used for Sentry alerts (reserved for upcoming `sentry-alert.js`) |
+| `OPS_SLACK_CHANNEL_ID` | Slack channel ID for Sentry alerts (posted via Bot 1's token) |
+| `SENTRY_CLIENT_SECRET` | Sentry Internal Integration client secret (for webhook HMAC verify) |
+| `VERCEL_API_TOKEN` | Personal Vercel token used by `/preview` to create deployments |
+| `VERCEL_TEAM_ID` | Vercel team ID (`team_…`) for deploy API calls |
+| `ONETHING_PROJECT_ID` | `prj_…` of the OneThing project |
+| `ONETHING_GITHUB_REPO_ID` | GitHub numeric repo ID for OneThing (required by Vercel deploy API) |
+| `ALLOWED_SLACK_USER_IDS` | CSV of Slack user IDs allowed to trigger `/preview` |
 
 ## Project Structure
 
@@ -133,6 +159,8 @@ api/
   bot2.js              — Bot 2 handler (general assistant)
   log-sink.js          — Vercel Log Drain receiver, writes errors to Redis ring buffer
   ops.js               — /ops slash command, summarizes recent errors via Claude Haiku
+  sentry-alert.js      — Sentry Internal Integration webhook, posts new issues to Slack
+  preview.js           — /preview slash command, creates Vercel preview deploys (allowlisted)
   whatsapp.js          — Twilio WhatsApp incoming webhook
   morning-briefing.js  — Morning briefing cron (calendar, tasks, emails, weather)
   finance-summary.js   — Daily finance summary cron (Wise)
