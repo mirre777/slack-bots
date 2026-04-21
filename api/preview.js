@@ -17,7 +17,6 @@ async function createPreviewDeployment(branch) {
       repoId: parseInt(process.env.ONETHING_GITHUB_REPO_ID, 10),
       ref: branch,
     },
-    target: "preview",
   };
   const res = await fetch(
     `https://api.vercel.com/v13/deployments?teamId=${process.env.VERCEL_TEAM_ID}&forceNew=1`,
